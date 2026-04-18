@@ -57,12 +57,13 @@
   },
   "mcpServers": {
     "laravel-boost": {
-      "command": "TODO",
-      "args": []
+      "command": "php",
+      "args": ["artisan", "boost:mcp"],
+      "cwd": "packages/collector"
     },
-    "next-dev-tool": {
-      "command": "TODO",
-      "args": []
+    "next-devtools": {
+      "command": "npx",
+      "args": ["-y", "next-devtools-mcp@latest"]
     }
   }
 }
