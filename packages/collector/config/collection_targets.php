@@ -15,13 +15,13 @@ return [
         'enabled' => (bool) env('COLLECT_TARGET_1_ENABLED', false),
     ],
 
-    // 対象自治体が決まり次第追加してください
-    // [
-    //     'url'      => 'https://www.city.example.lg.jp/',
-    //     'depth'    => 3,
-    //     'pages'    => 100,
-    //     'template' => 'childcare',
-    //     'enabled'  => true,
-    // ],
+    // 富山県高岡市（子育て・教育セクション）
+    [
+        'url' => 'https://www.city.takaoka.toyama.jp/gyosei/kosodate_kyoiku/index.html',
+        'depth' => 2,
+        'pages' => 100,
+        'template' => 'childcare',
+        'enabled' => true,
+    ],
 
 ];

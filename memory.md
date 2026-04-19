@@ -5,6 +5,7 @@
 ## 現在のフェーズ
 
 **Phase 1: データ収集モジュール** — 実装完了 ✓（テスト全通過）
+**高岡市データ収集** — 実行完了（22件保存）✓
 
 ## 直近タスク
 
@@ -40,6 +41,13 @@
 - [x] LLMモデルを `LLM_MODEL` 環境変数で設定可能に（デフォルト: `google/gemini-2.0-flash-exp:free`）
 - [x] `.env.example` 作成
 
+### 高岡市データ収集（完了）
+- [x] `www.city.takaoka.toyama.jp` に対して `collect:run` 実行
+- [x] `ExtractorService::repairPartialJson()` 追加（途中切れJSON対応）
+- [x] `ChildcareExtractorAgent` MaxTokens 2048→4096 に増加
+- [x] `config/collection_targets.php` に高岡市エントリ追加
+- [x] 22件の子育て支援情報を `storage/app/data/www-city-takaoka-toyama-jp/` に保存
+
 ## パッケージステータス
 
 | パッケージ | ステータス |
@@ -63,6 +71,8 @@
 | 2026-04-19 | ファクトチェック結果は `_fc_*` フィールドとして元JSONに追記 | 別ファイル管理より一元管理が扱いやすい |
 | 2026-04-19 | LLMモデルを `LLM_MODEL` env変数で切り替え可能に | PHP属性はコンパイル時定数のためenv不可→prompt()の`model:`引数で解決 |
 | 2026-04-19 | デフォルトモデルを `google/gemini-2.0-flash-exp:free` に設定 | 開発・テスト時のAPIコスト無料化 |
+| 2026-04-19 | 高岡市収集エントリポイントを `/gyosei/kosodate_kyoiku/index.html` に設定 | トップページはJS依存でリンク6件のみ、子育てセクション直指定で効率化 |
+| 2026-04-19 | ChildcareExtractorAgent MaxTokens 2048→4096 | free model がJSON途中で切れる問題を回避 |
 
 ## 既知の課題・ブロッカー
 

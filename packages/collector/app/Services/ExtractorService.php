@@ -94,7 +94,13 @@ class ExtractorService
         $cleaned = preg_replace('/^```(?:json)?\s*/m', '', $responseText);
         $cleaned = preg_replace('/\s*```$/m', '', $cleaned ?? $responseText);
 
-        $decoded = json_decode(trim($cleaned ?? $responseText), true);
+        $trimmed = trim($cleaned ?? $responseText);
+        $decoded = json_decode($trimmed, true);
+
+        if (! is_array($decoded)) {
+            // 途中切れのJSONを修復: 最後の完全なプロパティまでを取り出して閉じる
+            $decoded = $this->repairPartialJson($trimmed);
+        }
 
         if (! is_array($decoded)) {
             Log::warning('ExtractorService: JSONパース失敗', ['response' => mb_substr($responseText, 0, 200)]);
@@ -111,5 +117,38 @@ class ExtractorService
         }
 
         return $result;
+    }
+
+    /**
+     * 途中で切れたJSONを修復してパースを試みる。
+     *
+     * @return array<string, mixed>|null
+     */
+    private function repairPartialJson(string $text): ?array
+    {
+        if (! str_starts_with($text, '{')) {
+            return null;
+        }
+
+        // 末尾をカンマや未閉じ文字列で終わっている場合、閉じ括弧を補う
+        $candidate = rtrim($text, ", \t\n\r").'}';
+        $decoded = json_decode($candidate, true);
+
+        if (is_array($decoded)) {
+            return $decoded;
+        }
+
+        // 最後の未閉じ文字列値を取り除いてから閉じる
+        $cut = preg_replace('/,?\s*"[^"]*"\s*:\s*"[^"]*$/su', '', $text);
+
+        if ($cut !== null && $cut !== $text) {
+            $decoded = json_decode(rtrim($cut, ', ').' }', true);
+
+            if (is_array($decoded)) {
+                return $decoded;
+            }
+        }
+
+        return null;
     }
 }
