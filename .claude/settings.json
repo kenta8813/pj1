@@ -3,11 +3,10 @@
   "hooks": {
     "Stop": [
       {
-        "matcher": "",
         "hooks": [
           {
             "type": "command",
-            "command": "echo '\\n[Hook] セッション終了前に memory.md の更新を確認してください'"
+            "command": "printf '{\"systemMessage\":\"📝 セッション終了: memory.md の更新を確認してください\",\"hookSpecificOutput\":{\"hookEventName\":\"Stop\",\"additionalContext\":\"セッション終了前チェック（必須）: /home/user/pj1/memory.md を最新の進捗・決定事項に更新してください。memory.md の冒頭に「セッション終了前に更新する」と明記されています。未更新の場合は今すぐ更新してコミットしてください。\"}}'"
           }
         ]
       }
