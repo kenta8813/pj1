@@ -23,7 +23,7 @@ class ExtractorService
         try {
             $cleaned = $this->truncate($this->cleanHtml($html));
             $prompt = $this->buildUserPrompt($cleaned, $url, $template);
-            $response = (string) $this->agent->prompt($prompt);
+            $response = (string) $this->agent->prompt($prompt, model: config('ai.model'));
 
             return $this->parseJsonResponse($response, $template);
         } catch (\Throwable $e) {

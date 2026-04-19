@@ -37,6 +37,8 @@
 - [x] `app/Console/Commands/FactCheckVerify.php` 実装（`collect:verify`）
 - [x] `routes/console.php` → スケジューラー追記（週次収集・月次ファクトチェック）
 - [x] 単体テスト 35件 / フィーチャーテスト 29件（計64件、全パス）
+- [x] LLMモデルを `LLM_MODEL` 環境変数で設定可能に（デフォルト: `google/gemini-2.0-flash-exp:free`）
+- [x] `.env.example` 作成
 
 ## パッケージステータス
 
@@ -59,6 +61,8 @@
 | 2026-04-19 | 自律探索: LinkFilterAgentがリンク選別 | 盲目的全リンク走査を避けLLMコスト抑制 |
 | 2026-04-19 | データ保存先は `storage/app/data/` 専用ディスク | `.gitignore` 対象にして収集データをコミットしない |
 | 2026-04-19 | ファクトチェック結果は `_fc_*` フィールドとして元JSONに追記 | 別ファイル管理より一元管理が扱いやすい |
+| 2026-04-19 | LLMモデルを `LLM_MODEL` env変数で切り替え可能に | PHP属性はコンパイル時定数のためenv不可→prompt()の`model:`引数で解決 |
+| 2026-04-19 | デフォルトモデルを `google/gemini-2.0-flash-exp:free` に設定 | 開発・テスト時のAPIコスト無料化 |
 
 ## 既知の課題・ブロッカー
 

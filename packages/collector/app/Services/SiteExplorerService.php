@@ -99,7 +99,8 @@ class SiteExplorerService
         try {
             $linksJson = json_encode($links, JSON_UNESCAPED_UNICODE);
             $response = (string) $this->linkFilter->prompt(
-                "以下のURLリストから子育て支援に関連するものを返してください:\n{$linksJson}"
+                "以下のURLリストから子育て支援に関連するものを返してください:\n{$linksJson}",
+                model: config('ai.model')
             );
 
             $cleaned = preg_replace('/^```(?:json)?\s*/m', '', $response);

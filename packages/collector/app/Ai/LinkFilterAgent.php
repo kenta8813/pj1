@@ -3,7 +3,6 @@
 namespace App\Ai;
 
 use Laravel\Ai\Attributes\MaxTokens;
-use Laravel\Ai\Attributes\Model;
 use Laravel\Ai\Attributes\Provider;
 use Laravel\Ai\Attributes\Temperature;
 use Laravel\Ai\Contracts\Agent;
@@ -11,7 +10,6 @@ use Laravel\Ai\Enums\Lab;
 use Laravel\Ai\Promptable;
 
 #[Provider(Lab::OpenRouter)]
-#[Model('anthropic/claude-3-haiku')]
 #[Temperature(0.0)]
 #[MaxTokens(512)]
 class LinkFilterAgent implements Agent

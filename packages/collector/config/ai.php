@@ -37,6 +37,9 @@ return [
         ],
     ],
 
+    // LLMモデル設定
+    'model' => env('LLM_MODEL', 'google/gemini-2.0-flash-exp:free'),
+
     // データ収集モジュール用クローラー設定（Laravel AI SDK とは独立）
     'crawler' => [
         'timeout' => (int) env('CRAWLER_TIMEOUT', 30),
