@@ -45,7 +45,7 @@ class FactCheckService
         $prompt = "抽出済みデータ:\n".json_encode($dataForCheck, JSON_UNESCAPED_UNICODE)."\n\n現在のページHTML:\n".$clean;
 
         try {
-            $response = (string) $this->agent->prompt($prompt);
+            $response = (string) $this->agent->prompt($prompt, model: config('ai.model'));
             $result = $this->parseCheckResponse($response);
         } catch (\Throwable $e) {
             Log::warning("FactCheckService: LLM失敗 [{$url}] — {$e->getMessage()}");
