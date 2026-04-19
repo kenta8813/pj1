@@ -6,83 +6,75 @@
 自動収集するパイプラインを構築する。
 Phase 2（ポータルサイト構築）に供給するJSONデータを生成することがゴール。
 
+LLM 連携には Laravel 13 公式 AI SDK（`laravel/ai`）を使用する。
+
+---
+
+## アーキテクチャ概要
+
+### 自律探索フロー
+
+```
+入力: 自治体トップURL
+         │
+         ▼
+    FetchService::fetch()        → HTML取得
+         │
+         ▼
+    FetchService::extractLinks() → 同一ドメイン全リンク
+         │
+         ▼
+    LinkFilterAgent              ← LLMが子育て関連リンクを選別
+         │ 関連URLリスト
+         ▼
+    キューに追加（深度カウント付き）
+         │
+         ▼（各ページで繰り返し）
+    ExtractorService::extract()  ← LLMがデータ抽出
+         │ 子育て支援データ
+         ▼
+    DataStoreService::save()     → storage/app/data/**/*.json
+```
+
+### ファクトチェックフロー（独立コマンド）
+
+```
+DataStoreService::all()          → 収集済みJSONを全件取得
+         │
+         ▼
+    FetchService::fetch(url)      → 元ページを再取得
+         │
+         ▼
+    FactCheckerAgent              ← 抽出データ vs 現在のHTMLを比較
+         │ {confidence, issues}
+         ▼
+    DataStoreService::save()      → _fc_* フィールドを追記して上書き
+```
+
 ---
 
 ## 成果物一覧
 
 | # | 成果物 | パス |
 |---|--------|------|
-| 1 | LLM統合サービス | `app/Services/LlmService.php` |
-| 2 | クローラーサービス | `app/Services/CrawlerService.php` |
-| 3 | データ抽出サービス | `app/Services/ExtractorService.php` |
-| 4 | JSONストアサービス | `app/Services/DataStoreService.php` |
-| 5 | クロールキュージョブ | `app/Jobs/CrawlPageJob.php` |
-| 6 | Artisanコマンド | `app/Console/Commands/CollectRun.php` |
-| 7 | デフォルト出力テンプレート | `resources/templates/childcare.json` |
-| 8 | スケジューラー設定 | `routes/console.php` |
-| 9 | PHPUnit テスト | `tests/Feature/` `tests/Unit/` |
+| 1 | データ抽出エージェント | `app/Ai/ChildcareExtractorAgent.php` |
+| 2 | リンク選別エージェント | `app/Ai/LinkFilterAgent.php` |
+| 3 | ファクトチェックエージェント | `app/Ai/FactCheckerAgent.php` |
+| 4 | HTTP取得・リンク抽出 | `app/Services/FetchService.php` |
+| 5 | HTML→JSON抽出 | `app/Services/ExtractorService.php` |
+| 6 | JSONストア | `app/Services/DataStoreService.php` |
+| 7 | 自律探索司令塔 | `app/Services/SiteExplorerService.php` |
+| 8 | ファクトチェック実行 | `app/Services/FactCheckService.php` |
+| 9 | 探索キュージョブ | `app/Jobs/ExploreJob.php` |
+| 10 | 収集コマンド | `app/Console/Commands/CollectRun.php` |
+| 11 | ファクトチェックコマンド | `app/Console/Commands/FactCheckVerify.php` |
+| 12 | 出力テンプレート | `resources/templates/childcare.json` |
+| 13 | 収集対象設定 | `config/collection_targets.php` |
+| 14 | PHPUnit テスト | `tests/Unit/` `tests/Feature/` |
 
 ---
 
-## 実装ステップ
-
-### Step 1: LLM統合基盤
-
-**目的**: OpenRouter / Ollama への統一インターフェースを整備する。
-
-**タスク:**
-- `config/ai.php` を整備（プロバイダー・モデル・タイムアウト設定）
-- `.env.example` に必要な変数を追記
-
-```dotenv
-DEFAULT_LLM_PROVIDER=openrouter
-OPENROUTER_API_KEY=
-OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
-OPENROUTER_MODEL=anthropic/claude-3-haiku
-OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_MODEL=llama3
-```
-
-- `App\Services\LlmService`：プロバイダー切り替え可能な chat() メソッド
-  - Laravel HTTP Client でOpenRouter API を呼び出す
-  - Ollamaは `/api/chat` エンドポイントを使用
-  - タイムアウト・リトライ設定
-- Unit テスト（HTTP fake でモック）
-
-**完了条件:**
-- `LlmService::chat($messages)` でOpenRouterにリクエストが飛ぶ
-- プロバイダーを `.env` の `DEFAULT_LLM_PROVIDER` で切り替え可能
-
----
-
-### Step 2: クローラーサービス
-
-**目的**: エントリーポイントURLから再帰的にHTMLを取得する。
-
-**タスク:**
-- `App\Services\CrawlerService`
-  - `fetch(string $url): string` — HTML取得（Laravel HTTP Client）
-  - `extractLinks(string $html, string $baseUrl): array` — aタグからリンク抽出
-  - 訪問済みURL管理（配列 or Cacheファサード）
-  - 再帰深度上限（デフォルト: 2）
-  - 同一ドメイン外リンクをスキップ
-  - `robots.txt` の `Disallow` を尊重
-  - レートリミット（リクエスト間に sleep）
-- `App\Jobs\CrawlPageJob`：1ページのクロールをキュー化
-- Feature テスト（HTTP fake）
-
-**完了条件:**
-- `CrawlerService::crawl($url, depth: 2)` で収集URLリストが返る
-- 同一ドメイン外・robots.txt禁止パスはスキップされる
-
----
-
-### Step 3: データ抽出サービス
-
-**目的**: 取得したHTMLをLLMに渡し、テンプレート形式のJSONを抽出する。
-
-**タスク:**
-- `resources/templates/childcare.json` — デフォルト出力テンプレート
+## JSONスキーマ（`resources/templates/childcare.json`）
 
 ```json
 {
@@ -95,137 +87,86 @@ OLLAMA_MODEL=llama3
   "contact": "",
   "url": "",
   "municipality": "",
-  "updated_at": ""
+  "updated_at": "",
+
+  "_fc_checked_at": "",
+  "_fc_confidence": "",
+  "_fc_issues": []
 }
 ```
 
-- `App\Services\ExtractorService`
-  - `extract(string $html, string $url, array $template): array` — LLM抽出
-  - システムプロンプト：テンプレートJSONのキーに沿って情報を抽出するよう指示
-  - HTMLは本文のみに前処理（scriptタグ・styleタグ除去）してトークン削減
-  - LLMレスポンスのJSONパース・バリデーション
-  - 抽出失敗時は空配列を返す（例外を外に出さない）
-- Unit テスト（LlmService をモック）
-
-**完了条件:**
-- `ExtractorService::extract($html, $url, $template)` でテンプレートに沿ったJSONが返る
-- 抽出失敗時でもクラッシュしない
-
----
-
-### Step 4: JSONストアサービス
-
-**目的**: 抽出データをJSONファイルに永続化する。
-
-**タスク:**
-- `App\Services\DataStoreService`
-  - 保存先: `storage/app/data/{source-domain}/{slug}.json`
-  - `save(array $data): void` — JSONファイル書き込み
-  - `findByUrl(string $url): ?array` — URL重複確認
-  - `all(): Collection` — 全件取得（Phase 2 向け）
-  - slug は URLから生成（urlslug or Str::slug）
-  - upsert：同一URLのデータは上書き
-- Unit テスト
-
-**完了条件:**
-- `storage/app/data/` 以下にJSONが保存される
-- 同一URL再実行でファイルが上書きされる
-
----
-
-### Step 5: Artisanコマンド
-
-**目的**: 手動実行・CI実行のエントリーポイントを提供する。
-
-**コマンド仕様:**
-```
-php artisan collect:run {url} {--depth=2} {--template=childcare} {--dry-run}
-```
-
-| オプション | 説明 |
+| フィールド | 説明 |
 |-----------|------|
-| `url` | エントリーポイントURL（必須） |
-| `--depth` | クロール深度（デフォルト: 2） |
-| `--template` | 使用するテンプレート名（デフォルト: childcare） |
-| `--dry-run` | 保存せずに結果を標準出力のみ |
-
-**タスク:**
-- `App\Console\Commands\CollectRun` 作成
-- Laravel Pail 対応のログ出力（`Log::info()`）
-- 各ページの抽出結果をプログレスバーで表示
-- Feature テスト（コマンドの入出力検証）
-
-**完了条件:**
-- `php artisan collect:run https://example.com/kosodate --depth=2` が完走する
-- `--dry-run` で保存なしに結果確認できる
+| `title` | ページ/制度の名称 |
+| `category` | 子育て支援の種別（保育園・手当・相談窓口・イベント等） |
+| `target` | 対象者 |
+| `summary` | 200文字以内の概要 |
+| `eligibility` | 利用資格・条件 |
+| `application_method` | 申請・利用方法 |
+| `contact` | 問い合わせ先（電話・窓口・メール） |
+| `url` | 情報の元URL |
+| `municipality` | 自治体名（例: 東京都渋谷区） |
+| `updated_at` | ページ記載の更新日（YYYY-MM-DD） |
+| `_fc_checked_at` | ファクトチェック実行日時（ISO 8601） |
+| `_fc_confidence` | `"high"` / `"medium"` / `"low"` |
+| `_fc_issues` | 問題フィールドと理由の配列 |
 
 ---
 
-### Step 6: スケジューラー設定
+## エージェント設計（Laravel AI SDK）
 
-**目的**: 定期的な自動収集を設定する。
+### `ChildcareExtractorAgent`
+- Provider: `Lab::OpenRouter` / Model: `anthropic/claude-3-haiku`
+- 役割: ページHTMLからJSONテンプレートに沿って子育て支援情報を抽出
+- Temperature: 0.0 / MaxTokens: 2048
 
-**タスク:**
-- `config/collection_targets.php` — 収集対象URL・設定一覧
+### `LinkFilterAgent`
+- Provider: `Lab::OpenRouter` / Model: `anthropic/claude-3-haiku`
+- 役割: URLリストから子育て支援に関連するリンクのみを選別
+- Temperature: 0.0 / MaxTokens: 512
+
+### `FactCheckerAgent`
+- Provider: `Lab::OpenRouter` / Model: `anthropic/claude-3-haiku`
+- 役割: 抽出済みデータと現在のHTMLを比較して信頼性スコアを付与
+- Temperature: 0.0 / MaxTokens: 1024
+- 返答形式: `{"confidence": "high|medium|low", "issues": [...]}`
+
+---
+
+## コマンド仕様
+
+### 収集コマンド
+
+```bash
+php artisan collect:run {url}
+    {--depth=3}       # 探索深度
+    {--pages=100}     # 最大ページ数（暴走防止）
+    {--template=childcare}
+    {--dry-run}       # 保存せずログ出力のみ
+    {--queue}         # ExploreJob に投入して非同期実行
+```
+
+### ファクトチェックコマンド
+
+```bash
+php artisan collect:verify
+    {--url=}               # 特定URLのみ
+    {--confidence=all}     # all|high|medium|low|unchecked
+    {--dry-run}
+    {--queue}
+```
+
+---
+
+## スケジューラー
 
 ```php
-return [
-    [
-        'url'      => 'https://example-city.lg.jp/kosodate/',
-        'depth'    => 2,
-        'template' => 'childcare',
-        'schedule' => 'weekly',
-    ],
-    // ...
-];
-```
+// 週次収集（collection_targets.php で管理）
+Schedule::call(...)->weekly()->name('collect:weekly')->withoutOverlapping();
 
-- `routes/console.php` にスケジュール定義
-  - 週次で `collect:run` を対象URL分ループ実行
-- キュー使用時は `QUEUE_CONNECTION=database` に変更
-
-**完了条件:**
-- `php artisan schedule:list` でジョブが表示される
-
----
-
-### Step 7: データ集積（実証実行）
-
-**目的**: 実際の自治体サイトでパイプラインを検証し、データを蓄積する。
-
-**タスク:**
-- 対象サイト選定（5〜10自治体）
-- `collect:run` を実行・収集結果を手動レビュー
-- 抽出精度が低い場合はプロンプトを調整
-- Phase 2 で利用するJSONの最終スキーマを確定
-- 収集件数：50件以上を目標
-
-**完了条件:**
-- 子育て支援情報 50件以上のJSONが `storage/app/data/` に保存済み
-- 抽出精度を手動確認し合格（主要フィールドの充填率 80%以上）
-
----
-
-## データフロー
-
-```
-収集対象URL
-    │
-    ▼
-CrawlerService::crawl()
-    │ ページURLリスト
-    ▼
-CrawlerService::fetch()  ×N
-    │ HTML
-    ▼
-ExtractorService::extract()
-    │ LLMService::chat()
-    │ 抽出JSON
-    ▼
-DataStoreService::save()
-    │
-    ▼
-storage/app/data/**/*.json  ← Phase 2 が読み込む
+// 月次ファクトチェック（medium/low を再検証）
+Schedule::command('collect:verify --confidence=medium')
+    ->monthly()->name('factcheck:monthly')->withoutOverlapping();
 ```
 
 ---
@@ -234,25 +175,40 @@ storage/app/data/**/*.json  ← Phase 2 が読み込む
 
 | 項目 | 要件 |
 |------|------|
-| レートリミット | リクエスト間隔 1秒以上 |
-| タイムアウト | HTTP取得: 30秒、LLM: 60秒 |
-| ログ | Laravel Pail / `storage/logs/laravel.log` |
-| 機密情報 | APIキーは `.env` のみ、コミット禁止 |
-| robots.txt | 必ず尊重する |
-| トークン効率 | HTML前処理でscript/styleを除去してから送信 |
+| レートリミット | リクエスト間隔 1秒以上（`CRAWLER_RATE_LIMIT_MS`） |
+| タイムアウト | HTTP: 30秒、LLM: SDK デフォルト |
+| 文字コード | Shift-JIS / EUC-JP は UTF-8 に変換 |
+| robots.txt | `CRAWLER_RESPECT_ROBOTS=true` で尊重 |
+| トークン効率 | script/style/nav/footer 除去後に最大12,000文字でトリミング |
+| 機密情報 | APIキーは `.env` のみ。`storage/app/data/` はコミットしない |
+| 暴走防止 | `--depth` + `--pages` の二重制限 |
 
 ---
 
-## 完了条件（Phase 1 全体）
+## LLMコスト試算（参考）
 
-- [ ] `php artisan collect:run <url>` でJSONが `storage/app/data/` に出力される
-- [ ] LLM抽出精度を手動確認済み（主要フィールド充填率 80%以上）
+| 処理 | 概算 |
+|------|------|
+| `LinkFilterAgent` × 100ページ | 約 $0.02 |
+| `ChildcareExtractorAgent` × 30件 | 約 $0.03 |
+| `FactCheckerAgent` × 30件 | 約 $0.03 |
+| **1自治体あたり合計** | **約 $0.08** |
+
+（OpenRouter 経由、`anthropic/claude-3-haiku` 使用時）
+
+---
+
+## 完了条件
+
+- [ ] `php artisan collect:run <自治体URL>` でJSONが `storage/app/data/` に出力される
+- [ ] `LinkFilterAgent` による自律探索で子育て支援ページを網羅的に発見できる
+- [ ] `php artisan collect:verify` でファクトチェック結果が `_fc_*` フィールドに書き込まれる
 - [ ] 子育て支援情報 50件以上収集済み
 - [ ] `php artisan test --compact` がすべてパス
 - [ ] `.env` / APIキーがコミットされていない
-- [ ] `docs/phase1.md` をコミット済み
 
 ## 次フェーズへの引き継ぎ
 
-Phase 2（ポータルサイト構築）で使用するJSONの最終スキーマを
-`resources/templates/childcare.json` に確定させてからフェーズを終了する。
+Phase 2（ポータルサイト構築）で使用するJSONの最終スキーマは
+`resources/templates/childcare.json` で確定済み。
+`_fc_confidence` フィールドを使ってポータル側で信頼性フィルタリングが可能。
