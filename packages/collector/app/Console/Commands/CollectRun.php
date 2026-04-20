@@ -52,6 +52,7 @@ class CollectRun extends Command
             maxDepth: $depth,
             maxPages: $pages,
             dryRun: $dryRun,
+            templateName: $templateName,
         );
 
         $this->info("完了: {$saved}件".($dryRun ? '（dry-run のため保存なし）' : '保存'));

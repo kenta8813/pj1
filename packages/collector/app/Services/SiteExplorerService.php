@@ -15,7 +15,7 @@ class SiteExplorerService
     ) {}
 
     /**
-     * Autonomously explore a municipality site and collect childcare support data.
+     * Autonomously explore a municipality site and collect data.
      *
      * @param  array<string, mixed>  $template
      */
@@ -25,6 +25,7 @@ class SiteExplorerService
         int $maxDepth = 3,
         int $maxPages = 100,
         bool $dryRun = false,
+        string $templateName = 'childcare',
     ): int {
         $queue = [$entryUrl => 0];
         $visited = [];
@@ -61,9 +62,11 @@ class SiteExplorerService
                 continue;
             }
 
-            $data = $this->extractor->extract($html, $url, $template);
+            $data = $this->extractor->extract($html, $url, $template, $templateName);
 
-            if (! empty($data) && ($data['title'] ?? '') !== '') {
+            $primaryKey = $templateName === 'grants' ? 'name' : 'title';
+
+            if (! empty($data) && ($data[$primaryKey] ?? '') !== '') {
                 if (! $dryRun) {
                     $this->store->save($data);
                 }
@@ -73,7 +76,7 @@ class SiteExplorerService
 
             if ($depth < $maxDepth) {
                 $allLinks = $this->fetcher->extractLinks($html, $url);
-                $relevant = $this->filterLinks($allLinks);
+                $relevant = $this->filterLinks($allLinks, $templateName);
 
                 foreach ($relevant as $link) {
                     if (! isset($visited[$link]) && ! isset($queue[$link])) {
@@ -90,16 +93,20 @@ class SiteExplorerService
      * @param  array<int, string>  $links
      * @return array<int, string>
      */
-    private function filterLinks(array $links): array
+    private function filterLinks(array $links, string $templateName = 'childcare'): array
     {
         if (empty($links)) {
             return [];
         }
 
+        $prompt = $templateName === 'grants'
+            ? "以下のURLリストから、給付金・助成金・手当・補助金・医療費助成・保育料助成に関連するURLのみを返してください:\n"
+            : "以下のURLリストから子育て支援に関連するものを返してください:\n";
+
         try {
             $linksJson = json_encode($links, JSON_UNESCAPED_UNICODE);
             $response = (string) $this->linkFilter->prompt(
-                "以下のURLリストから子育て支援に関連するものを返してください:\n{$linksJson}",
+                $prompt.$linksJson,
                 model: config('ai.model')
             );
 

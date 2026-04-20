@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Ai\ChildcareExtractorAgent;
+use App\Ai\GrantsExtractorAgent;
 use App\Ai\LinkFilterAgent;
 use App\Jobs\ExploreJob;
 use App\Services\DataStoreService;
@@ -42,7 +43,7 @@ class ExploreJobTest extends TestCase
         $this->app->instance(SiteExplorerService::class, new SiteExplorerService(
             new FetchService,
             $linkFilterAgent,
-            new ExtractorService($extractorAgent),
+            new ExtractorService($extractorAgent, $this->createMock(GrantsExtractorAgent::class)),
             new DataStoreService,
         ));
     }

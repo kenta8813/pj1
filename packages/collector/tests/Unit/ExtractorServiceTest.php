@@ -3,6 +3,7 @@
 namespace Tests\Unit;
 
 use App\Ai\ChildcareExtractorAgent;
+use App\Ai\GrantsExtractorAgent;
 use App\Services\ExtractorService;
 use Laravel\Ai\Responses\AgentResponse;
 use Laravel\Ai\Responses\Data\Meta;
@@ -41,7 +42,7 @@ class ExtractorServiceTest extends TestCase
         $agent = $this->createMock(ChildcareExtractorAgent::class);
         $agent->method('prompt')->willReturn($this->makeAgentResponse($agentResponse));
 
-        return new ExtractorService($agent);
+        return new ExtractorService($agent, $this->createMock(GrantsExtractorAgent::class));
     }
 
     public function test_extract_returns_filled_array_on_success(): void
@@ -65,7 +66,7 @@ class ExtractorServiceTest extends TestCase
         $agent = $this->createMock(ChildcareExtractorAgent::class);
         $agent->method('prompt')->willThrowException(new \RuntimeException('API error'));
 
-        $service = new ExtractorService($agent);
+        $service = new ExtractorService($agent, $this->createMock(GrantsExtractorAgent::class));
         $result = $service->extract('<html></html>', 'https://example.com/', $this->template);
 
         $this->assertEmpty($result);
@@ -111,7 +112,7 @@ class ExtractorServiceTest extends TestCase
     public function test_clean_html_removes_script_tags(): void
     {
         $agent = $this->createMock(ChildcareExtractorAgent::class);
-        $service = new ExtractorService($agent);
+        $service = new ExtractorService($agent, $this->createMock(GrantsExtractorAgent::class));
         $html = '<html><body><script>alert("xss")</script><p>本文</p></body></html>';
 
         $result = $service->cleanHtml($html);
@@ -123,7 +124,7 @@ class ExtractorServiceTest extends TestCase
     public function test_clean_html_removes_style_tags(): void
     {
         $agent = $this->createMock(ChildcareExtractorAgent::class);
-        $service = new ExtractorService($agent);
+        $service = new ExtractorService($agent, $this->createMock(GrantsExtractorAgent::class));
         $html = '<html><body><style>.foo{color:red}</style><p>内容</p></body></html>';
 
         $result = $service->cleanHtml($html);
@@ -135,7 +136,7 @@ class ExtractorServiceTest extends TestCase
     public function test_clean_html_removes_nav_and_footer(): void
     {
         $agent = $this->createMock(ChildcareExtractorAgent::class);
-        $service = new ExtractorService($agent);
+        $service = new ExtractorService($agent, $this->createMock(GrantsExtractorAgent::class));
         $html = '<html><body><nav>ナビ</nav><main>本文</main><footer>フッター</footer></body></html>';
 
         $result = $service->cleanHtml($html);

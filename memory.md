@@ -48,6 +48,15 @@
 - [x] `config/collection_targets.php` に高岡市エントリ追加
 - [x] 22件の子育て支援情報を `storage/app/data/www-city-takaoka-toyama-jp/` に保存
 
+### 給付・助成金特化収集（完了）
+- [x] `resources/templates/grants.json` 新規作成（name/type/amount/deadline 等）
+- [x] `app/Ai/GrantsExtractorAgent.php` 実装（給付特化プロンプト）
+- [x] `ExtractorService` をテンプレート名でエージェント切り替え対応に改修
+- [x] `SiteExplorerService` に `templateName` パラメータ追加
+- [x] `LinkFilterAgent` の instructions に給付系カテゴリを追記
+- [x] テスト全通過（66件）
+- [x] 高岡市給付ページ 10件追加保存（計32件）
+
 ## パッケージステータス
 
 | パッケージ | ステータス |

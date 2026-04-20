@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Ai\ChildcareExtractorAgent;
+use App\Ai\GrantsExtractorAgent;
 use App\Ai\LinkFilterAgent;
 use App\Services\DataStoreService;
 use App\Services\ExtractorService;
@@ -50,7 +51,7 @@ class SiteExplorerServiceTest extends TestCase
         return new SiteExplorerService(
             new FetchService,
             $linkFilter,
-            new ExtractorService($extractor),
+            new ExtractorService($extractor, $this->createMock(GrantsExtractorAgent::class)),
             new DataStoreService,
         );
     }
@@ -182,7 +183,7 @@ class SiteExplorerServiceTest extends TestCase
         $service = new SiteExplorerService(
             new FetchService,
             $linkFilter,
-            new ExtractorService($extractorMock),
+            new ExtractorService($extractorMock, $this->createMock(GrantsExtractorAgent::class)),
             new DataStoreService,
         );
 

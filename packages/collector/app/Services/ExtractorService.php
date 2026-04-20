@@ -3,29 +3,35 @@
 namespace App\Services;
 
 use App\Ai\ChildcareExtractorAgent;
+use App\Ai\GrantsExtractorAgent;
 use Illuminate\Support\Facades\Log;
+use Laravel\Ai\Contracts\Agent;
 use Symfony\Component\DomCrawler\Crawler;
 
 class ExtractorService
 {
     public function __construct(
-        private readonly ChildcareExtractorAgent $agent,
+        private readonly ChildcareExtractorAgent $childcareAgent,
+        private readonly GrantsExtractorAgent $grantsAgent,
     ) {}
 
     /**
-     * HTMLからテンプレートJSONに沿って子育て支援情報を抽出する。
+     * HTMLからテンプレートJSONに沿って情報を抽出する。
+     * テンプレート名に応じて使用するエージェントを切り替える。
      *
      * @param  array<string, mixed>  $template  出力テンプレート（キーのみ使用）
+     * @param  string  $templateName  テンプレート名（例: childcare / grants）
      * @return array<string, mixed> 抽出結果。失敗・非関連ページは空配列
      */
-    public function extract(string $html, string $url, array $template): array
+    public function extract(string $html, string $url, array $template, string $templateName = 'childcare'): array
     {
         try {
             $cleaned = $this->truncate($this->cleanHtml($html));
             $prompt = $this->buildUserPrompt($cleaned, $url, $template);
-            $response = (string) $this->agent->prompt($prompt, model: config('ai.model'));
+            $agent = $this->resolveAgent($templateName);
+            $response = (string) $agent->prompt($prompt, model: config('ai.model'));
 
-            return $this->parseJsonResponse($response, $template);
+            return $this->parseJsonResponse($response, $template, $templateName);
         } catch (\Throwable $e) {
             Log::warning("ExtractorService: 抽出失敗 [{$url}] — {$e->getMessage()}");
 
@@ -53,6 +59,14 @@ class ExtractorService
         $text = strip_tags($crawler->count() > 0 ? $crawler->html() : $html);
 
         return (string) preg_replace('/\s+/', ' ', $text);
+    }
+
+    private function resolveAgent(string $templateName): Agent
+    {
+        return match ($templateName) {
+            'grants' => $this->grantsAgent,
+            default => $this->childcareAgent,
+        };
     }
 
     private function truncate(string $text): string
@@ -84,11 +98,12 @@ class ExtractorService
 
     /**
      * LLMレスポンスをJSONパースしてテンプレートキーに絞り込む。
+     * grants テンプレートは name フィールドが空なら非関連ページと判断して空配列を返す。
      *
      * @param  array<string, mixed>  $template
      * @return array<string, mixed>
      */
-    private function parseJsonResponse(string $responseText, array $template): array
+    private function parseJsonResponse(string $responseText, array $template, string $templateName = 'childcare'): array
     {
         // LLMが誤って ```json ... ``` を付けた場合の保護
         $cleaned = preg_replace('/^```(?:json)?\s*/m', '', $responseText);
@@ -114,6 +129,11 @@ class ExtractorService
         foreach (array_keys($template) as $key) {
             $value = $decoded[$key] ?? '';
             $result[$key] = is_array($value) ? $value : (string) $value;
+        }
+
+        // grants: name が空なら給付・助成金ページではないと判断
+        if ($templateName === 'grants' && ($result['name'] ?? '') === '') {
+            return [];
         }
 
         return $result;
