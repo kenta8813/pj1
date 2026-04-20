@@ -12,6 +12,7 @@ class SiteExplorerService
         private readonly LinkFilterAgent $linkFilter,
         private readonly ExtractorService $extractor,
         private readonly DataStoreService $store,
+        private readonly SitemapService $sitemap,
     ) {}
 
     /**
@@ -27,7 +28,10 @@ class SiteExplorerService
         bool $dryRun = false,
         string $templateName = 'childcare',
     ): int {
-        $queue = [$entryUrl => 0];
+        $sitemapUrls = $this->sitemap->discoverUrls($entryUrl, $templateName);
+        $queue = ! empty($sitemapUrls)
+            ? array_fill_keys($sitemapUrls, 0)
+            : [$entryUrl => 0];
         $visited = [];
         $saved = 0;
 

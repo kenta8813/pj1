@@ -9,6 +9,7 @@ use App\Services\DataStoreService;
 use App\Services\ExtractorService;
 use App\Services\FetchService;
 use App\Services\SiteExplorerService;
+use App\Services\SitemapService;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Ai\Responses\AgentResponse;
@@ -48,11 +49,15 @@ class SiteExplorerServiceTest extends TestCase
         ChildcareExtractorAgent $extractor,
         LinkFilterAgent $linkFilter,
     ): SiteExplorerService {
+        $sitemap = $this->createMock(SitemapService::class);
+        $sitemap->method('discoverUrls')->willReturn([]);
+
         return new SiteExplorerService(
             new FetchService,
             $linkFilter,
             new ExtractorService($extractor, $this->createMock(GrantsExtractorAgent::class)),
             new DataStoreService,
+            $sitemap,
         );
     }
 
@@ -179,12 +184,15 @@ class SiteExplorerServiceTest extends TestCase
         $extractorMock = $this->createMock(ChildcareExtractorAgent::class);
         $extractorMock->expects($this->never())->method('prompt');
 
+        $sitemapMock = $this->createMock(SitemapService::class);
+        $sitemapMock->method('discoverUrls')->willReturn([]);
         $linkFilter = $this->makeLinkFilterAgent([]);
         $service = new SiteExplorerService(
             new FetchService,
             $linkFilter,
             new ExtractorService($extractorMock, $this->createMock(GrantsExtractorAgent::class)),
             new DataStoreService,
+            $sitemapMock,
         );
 
         $saved = $service->explore('https://example.com/admin/', $this->template(), maxDepth: 0);

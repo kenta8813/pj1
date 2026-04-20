@@ -10,6 +10,7 @@ use App\Services\DataStoreService;
 use App\Services\ExtractorService;
 use App\Services\FetchService;
 use App\Services\SiteExplorerService;
+use App\Services\SitemapService;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
@@ -40,11 +41,15 @@ class ExploreJobTest extends TestCase
             new AgentResponse('id', json_encode($filteredLinks, JSON_UNESCAPED_UNICODE), new Usage, new Meta)
         );
 
+        $sitemapMock = $this->createMock(SitemapService::class);
+        $sitemapMock->method('discoverUrls')->willReturn([]);
+
         $this->app->instance(SiteExplorerService::class, new SiteExplorerService(
             new FetchService,
             $linkFilterAgent,
             new ExtractorService($extractorAgent, $this->createMock(GrantsExtractorAgent::class)),
             new DataStoreService,
+            $sitemapMock,
         ));
     }
 
