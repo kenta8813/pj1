@@ -30,13 +30,14 @@ class SitemapServiceTest extends TestCase
         return "<?xml version=\"1.0\"?><urlset>{$items}</urlset>";
     }
 
-    public function test_discover_urls_returns_pages_from_direct_sitemap(): void
+    public function test_discover_urls_returns_only_index_pages_from_direct_sitemap(): void
     {
         Http::fake([
             'https://example.com/sitemap.xml' => Http::response(
                 $this->sitemapXml([
-                    'https://example.com/hoiku/page1',
-                    'https://example.com/hoiku/page2',
+                    'https://example.com/hoiku/index.html',
+                    'https://example.com/kosodate/',
+                    'https://example.com/hoiku/6897.html',
                 ]),
                 200
             ),
@@ -45,8 +46,28 @@ class SitemapServiceTest extends TestCase
         $urls = $this->makeService()->discoverUrls('https://example.com/some/page');
 
         $this->assertCount(2, $urls);
-        $this->assertContains('https://example.com/hoiku/page1', $urls);
-        $this->assertContains('https://example.com/hoiku/page2', $urls);
+        $this->assertContains('https://example.com/hoiku/index.html', $urls);
+        $this->assertContains('https://example.com/kosodate/', $urls);
+        $this->assertNotContains('https://example.com/hoiku/6897.html', $urls);
+    }
+
+    public function test_discover_urls_excludes_leaf_pages(): void
+    {
+        Http::fake([
+            'https://example.com/sitemap.xml' => Http::response(
+                $this->sitemapXml([
+                    'https://example.com/kosodate/index.html',
+                    'https://example.com/kosodate/1/10597.html',
+                    'https://example.com/kosodate/news/6700.html',
+                ]),
+                200
+            ),
+        ]);
+
+        $urls = $this->makeService()->discoverUrls('https://example.com/');
+
+        $this->assertCount(1, $urls);
+        $this->assertSame('https://example.com/kosodate/index.html', $urls[0]);
     }
 
     public function test_discover_urls_filters_sitemap_self_references(): void
@@ -54,7 +75,7 @@ class SitemapServiceTest extends TestCase
         Http::fake([
             'https://example.com/sitemap.xml' => Http::response(
                 $this->sitemapXml([
-                    'https://example.com/page1',
+                    'https://example.com/kosodate/index.html',
                     'https://example.com/sitemap2.xml',
                 ]),
                 200
@@ -64,7 +85,7 @@ class SitemapServiceTest extends TestCase
         $urls = $this->makeService()->discoverUrls('https://example.com/');
 
         $this->assertCount(1, $urls);
-        $this->assertContains('https://example.com/page1', $urls);
+        $this->assertContains('https://example.com/kosodate/index.html', $urls);
     }
 
     public function test_discover_urls_processes_sitemap_index_with_keyword_filter(): void
@@ -78,7 +99,7 @@ class SitemapServiceTest extends TestCase
                 200
             ),
             'https://example.com/sitemap-kosodate.xml' => Http::response(
-                $this->sitemapXml(['https://example.com/kosodate/page1']),
+                $this->sitemapXml(['https://example.com/kosodate/index.html']),
                 200
             ),
         ]);
@@ -86,7 +107,7 @@ class SitemapServiceTest extends TestCase
         $urls = $this->makeService()->discoverUrls('https://example.com/', 'childcare');
 
         $this->assertCount(1, $urls);
-        $this->assertContains('https://example.com/kosodate/page1', $urls);
+        $this->assertContains('https://example.com/kosodate/index.html', $urls);
     }
 
     public function test_discover_urls_returns_empty_on_404(): void
@@ -122,11 +143,11 @@ class SitemapServiceTest extends TestCase
                 200
             ),
             'https://example.com/sitemap-kosodate.xml' => Http::response(
-                $this->sitemapXml(['https://example.com/shared/page']),
+                $this->sitemapXml(['https://example.com/shared/index.html']),
                 200
             ),
             'https://example.com/sitemap-kodomo.xml' => Http::response(
-                $this->sitemapXml(['https://example.com/shared/page']),
+                $this->sitemapXml(['https://example.com/shared/index.html']),
                 200
             ),
         ]);
@@ -147,7 +168,7 @@ class SitemapServiceTest extends TestCase
                 200
             ),
             'https://example.com/sitemap-teate.xml' => Http::response(
-                $this->sitemapXml(['https://example.com/teate/page1']),
+                $this->sitemapXml(['https://example.com/teate/index.html']),
                 200
             ),
         ]);
@@ -155,14 +176,14 @@ class SitemapServiceTest extends TestCase
         $urls = $this->makeService()->discoverUrls('https://example.com/', 'grants');
 
         $this->assertCount(1, $urls);
-        $this->assertContains('https://example.com/teate/page1', $urls);
+        $this->assertContains('https://example.com/teate/index.html', $urls);
     }
 
     public function test_discover_urls_builds_sitemap_url_from_entry_path(): void
     {
         Http::fake([
             'https://example.com/sitemap.xml' => Http::response(
-                $this->sitemapXml(['https://example.com/page']),
+                $this->sitemapXml(['https://example.com/kosodate/index.html']),
                 200
             ),
         ]);

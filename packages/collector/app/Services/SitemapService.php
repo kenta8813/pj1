@@ -115,7 +115,8 @@ class SitemapService
     }
 
     /**
-     * サイトマップXMLからページURLを抽出する（サイトマップURL自体は除く）。
+     * サイトマップXMLからセクション入口URL（index.html / ディレクトリroot）を抽出する。
+     * 葉ページ（個別記事・番号URL等）は除外し、HTMLリンク探索の起点となるURLだけを返す。
      *
      * @return array<int, string>
      */
@@ -125,7 +126,21 @@ class SitemapService
 
         return array_values(array_filter(
             array_map('trim', $m[1] ?? []),
-            fn (string $url) => ! str_contains($url, 'sitemap')
+            fn (string $url) => ! str_contains($url, 'sitemap') && $this->isIndexUrl($url)
         ));
+    }
+
+    /**
+     * URLがセクション入口（index.html または ディレクトリroot）かどうかを判定する。
+     */
+    private function isIndexUrl(string $url): bool
+    {
+        $path = parse_url($url, PHP_URL_PATH) ?? '';
+
+        if (str_ends_with($path, '/')) {
+            return true;
+        }
+
+        return preg_match('/^index\.html?$/i', basename($path)) === 1;
     }
 }
