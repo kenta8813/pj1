@@ -23,15 +23,20 @@ class SiteExplorerService
     public function explore(
         string $entryUrl,
         array $template,
-        int $maxDepth = 3,
+        ?int $maxDepth = null,
         int $maxPages = 100,
         bool $dryRun = false,
         string $templateName = 'childcare',
     ): int {
         $sitemapUrls = $this->sitemap->discoverUrls($entryUrl, $templateName);
-        $queue = ! empty($sitemapUrls)
+        $usingSitemap = ! empty($sitemapUrls);
+
+        $queue = $usingSitemap
             ? array_fill_keys($sitemapUrls, 0)
             : [$entryUrl => 0];
+
+        // サイトマップあり: index.html起点から2段、なし: エントリURLから5段
+        $effectiveDepth = $maxDepth ?? ($usingSitemap ? 2 : 5);
         $visited = [];
         $saved = 0;
 
@@ -78,7 +83,7 @@ class SiteExplorerService
                 Log::info("SiteExplorerService: 保存 [{$url}]");
             }
 
-            if ($depth < $maxDepth) {
+            if ($depth < $effectiveDepth) {
                 $allLinks = $this->fetcher->extractLinks($html, $url);
                 $relevant = $this->filterLinks($allLinks, $templateName);
 

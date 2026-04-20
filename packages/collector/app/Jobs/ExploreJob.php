@@ -21,7 +21,7 @@ class ExploreJob implements ShouldQueue
     public function __construct(
         public readonly string $entryUrl,
         public readonly string $templateName = 'childcare',
-        public readonly int $maxDepth = 3,
+        public readonly ?int $maxDepth = null,
         public readonly int $maxPages = 100,
         public readonly bool $dryRun = false,
     ) {}

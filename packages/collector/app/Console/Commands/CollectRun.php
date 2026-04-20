@@ -10,7 +10,7 @@ class CollectRun extends Command
 {
     protected $signature = 'collect:run
         {url : 収集対象の自治体サイトURL}
-        {--depth=3 : 探索深度}
+        {--depth= : 探索深度（省略時: サイトマップあり=2, なし=5）}
         {--pages=100 : 最大ページ数}
         {--template=childcare : テンプレート名}
         {--dry-run : 保存せず結果をログ出力のみ}
@@ -21,7 +21,7 @@ class CollectRun extends Command
     public function handle(SiteExplorerService $explorer): int
     {
         $url = (string) $this->argument('url');
-        $depth = (int) $this->option('depth');
+        $depth = $this->option('depth') !== null ? (int) $this->option('depth') : null;
         $pages = (int) $this->option('pages');
         $templateName = (string) $this->option('template');
         $dryRun = (bool) $this->option('dry-run');
