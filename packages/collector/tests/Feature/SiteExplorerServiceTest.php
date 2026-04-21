@@ -76,7 +76,7 @@ class SiteExplorerServiceTest extends TestCase
             'https://example.com/' => Http::response('<html><body><main>保育園情報</main></body></html>', 200),
         ]);
 
-        $extractor = $this->makeExtractorAgent(['title' => '保育園案内', 'url' => 'https://example.com/']);
+        $extractor = $this->makeExtractorAgent(['title' => '保育園案内', 'target' => '0〜5歳', 'contact' => '子育て課', 'url' => 'https://example.com/']);
         $linkFilter = $this->makeLinkFilterAgent([]);
 
         $service = $this->makeService($extractor, $linkFilter);
@@ -111,7 +111,7 @@ class SiteExplorerServiceTest extends TestCase
         $extractorMock = $this->createMock(ChildcareExtractorAgent::class);
         $extractorMock->method('prompt')->willReturnCallback(function ($prompt) {
             if (str_contains((string) $prompt, '/hoiku')) {
-                return new AgentResponse('id', json_encode(['title' => '保育園', 'url' => 'https://example.com/hoiku'], JSON_UNESCAPED_UNICODE), new Usage, new Meta);
+                return new AgentResponse('id', json_encode(['title' => '保育園', 'target' => '0〜5歳', 'contact' => '子育て課', 'url' => 'https://example.com/hoiku'], JSON_UNESCAPED_UNICODE), new Usage, new Meta);
             }
 
             return new AgentResponse('id', json_encode(['title' => '', 'url' => 'https://example.com/'], JSON_UNESCAPED_UNICODE), new Usage, new Meta);
@@ -133,7 +133,7 @@ class SiteExplorerServiceTest extends TestCase
 
         $extractorMock = $this->createMock(ChildcareExtractorAgent::class);
         $extractorMock->method('prompt')->willReturn(
-            new AgentResponse('id', json_encode(['title' => 'ページ', 'url' => 'https://example.com/'], JSON_UNESCAPED_UNICODE), new Usage, new Meta)
+            new AgentResponse('id', json_encode(['title' => 'ページ', 'target' => '市民', 'contact' => '市役所', 'url' => 'https://example.com/'], JSON_UNESCAPED_UNICODE), new Usage, new Meta)
         );
 
         $linkFilterMock = $this->createMock(LinkFilterAgent::class);
@@ -162,7 +162,7 @@ class SiteExplorerServiceTest extends TestCase
 
         $extractorMock = $this->createMock(ChildcareExtractorAgent::class);
         $extractorMock->method('prompt')->willReturn(
-            new AgentResponse('id', json_encode(['title' => 'タイトル', 'url' => ''], JSON_UNESCAPED_UNICODE), new Usage, new Meta)
+            new AgentResponse('id', json_encode(['title' => 'タイトル', 'target' => '市民', 'contact' => '市役所', 'url' => ''], JSON_UNESCAPED_UNICODE), new Usage, new Meta)
         );
 
         $linkFilter = $this->makeLinkFilterAgent(['https://example.com/p2', 'https://example.com/p3']);
@@ -221,7 +221,7 @@ class SiteExplorerServiceTest extends TestCase
             'https://example.com/' => Http::response('<html><body>内容</body></html>', 200),
         ]);
 
-        $extractor = $this->makeExtractorAgent(['title' => '子育て', 'url' => 'https://example.com/']);
+        $extractor = $this->makeExtractorAgent(['title' => '子育て', 'target' => '保護者', 'contact' => '子育て課', 'url' => 'https://example.com/']);
         $linkFilter = $this->makeLinkFilterAgent([]);
         $service = $this->makeService($extractor, $linkFilter);
 

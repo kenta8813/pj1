@@ -59,7 +59,7 @@ class ExploreJobTest extends TestCase
             'https://example.com/' => Http::response('<html><body>保育園情報</body></html>', 200),
         ]);
 
-        $this->bindMockedExplorer(['title' => '保育園', 'url' => 'https://example.com/']);
+        $this->bindMockedExplorer(['title' => '保育園', 'target' => '0〜5歳', 'contact' => '子育て課', 'url' => 'https://example.com/']);
 
         $job = new ExploreJob('https://example.com/', 'childcare', maxDepth: 0);
         $job->handle(app(SiteExplorerService::class));
@@ -84,7 +84,7 @@ class ExploreJobTest extends TestCase
             'https://example.com/' => Http::response('<html><body>内容</body></html>', 200),
         ]);
 
-        $this->bindMockedExplorer(['title' => '子育て', 'url' => 'https://example.com/']);
+        $this->bindMockedExplorer(['title' => '子育て', 'target' => '保護者', 'contact' => '子育て課', 'url' => 'https://example.com/']);
 
         $job = new ExploreJob('https://example.com/', 'childcare', maxDepth: 0, dryRun: true);
         $job->handle(app(SiteExplorerService::class));

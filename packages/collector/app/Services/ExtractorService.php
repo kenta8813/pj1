@@ -10,6 +10,14 @@ use Symfony\Component\DomCrawler\Crawler;
 
 class ExtractorService
 {
+    /** @var array<string, array<int, string>> テンプレート別の主要フィールド（充足率チェック対象） */
+    private const MEANINGFUL_FIELDS = [
+        'childcare' => ['target', 'summary', 'eligibility', 'application_method', 'contact'],
+        'grants' => ['type', 'target', 'eligibility', 'application_method', 'contact'],
+    ];
+
+    private const MIN_FILLED_FIELDS = 2;
+
     public function __construct(
         private readonly ChildcareExtractorAgent $childcareAgent,
         private readonly GrantsExtractorAgent $grantsAgent,
@@ -131,8 +139,16 @@ class ExtractorService
             $result[$key] = is_array($value) ? $value : (string) $value;
         }
 
-        // grants: name が空なら給付・助成金ページではないと判断
-        if ($templateName === 'grants' && ($result['name'] ?? '') === '') {
+        // 主キーが空なら非関連ページ
+        $primaryKey = $templateName === 'grants' ? 'name' : 'title';
+        if (($result[$primaryKey] ?? '') === '') {
+            return [];
+        }
+
+        // フィールド充足率チェック: 主要フィールドのうち最低2個が非空でなければノイズ
+        $meaningfulFields = self::MEANINGFUL_FIELDS[$templateName] ?? self::MEANINGFUL_FIELDS['childcare'];
+        $filledCount = count(array_filter($meaningfulFields, fn ($f) => ($result[$f] ?? '') !== ''));
+        if ($filledCount < self::MIN_FILLED_FIELDS) {
             return [];
         }
 
