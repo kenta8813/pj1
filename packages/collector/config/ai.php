@@ -45,7 +45,7 @@ return [
         'timeout' => (int) env('CRAWLER_TIMEOUT', 30),
         'rate_limit_ms' => (int) env('CRAWLER_RATE_LIMIT_MS', 1000),
         'max_depth' => (int) env('CRAWLER_MAX_DEPTH', 3),
-        'user_agent' => env('CRAWLER_USER_AGENT', 'Mozilla/5.0 (compatible; ChildcareBot/1.0)'),
+        'user_agent' => env('CRAWLER_USER_AGENT', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'),
         'respect_robots' => (bool) env('CRAWLER_RESPECT_ROBOTS', true),
         'max_html_chars' => (int) env('CRAWLER_MAX_HTML_CHARS', 12000),
     ],
