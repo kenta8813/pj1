@@ -193,4 +193,87 @@ class SitemapServiceTest extends TestCase
         $this->assertNotEmpty($urls);
         Http::assertSent(fn ($req) => $req->url() === 'https://example.com/sitemap.xml');
     }
+
+    public function test_discover_urls_excludes_urls_exceeding_max_depth(): void
+    {
+        config(['ai.crawler.sitemap_max_depth' => 3]);
+
+        Http::fake([
+            'https://example.com/sitemap.xml' => Http::response(
+                $this->sitemapXml([
+                    'https://example.com/kosodate/',
+                    'https://example.com/kosodate/hoiku/',
+                    'https://example.com/kosodate/hoiku/shien/',
+                    'https://example.com/kosodate/hoiku/shien/ninsho/', // 深さ4 → 除外
+                ]),
+                200
+            ),
+        ]);
+
+        $urls = $this->makeService()->discoverUrls('https://example.com/', 'childcare');
+
+        $this->assertCount(3, $urls);
+        $this->assertNotContains('https://example.com/kosodate/hoiku/shien/ninsho/', $urls);
+    }
+
+    public function test_discover_urls_applies_keyword_filter_to_url_paths_in_direct_sitemap(): void
+    {
+        Http::fake([
+            'https://example.com/sitemap.xml' => Http::response(
+                $this->sitemapXml([
+                    'https://example.com/kosodate/',
+                    'https://example.com/tourism/',         // キーワード不一致 → 除外
+                    'https://example.com/kanko/index.html', // キーワード不一致 → 除外
+                ]),
+                200
+            ),
+        ]);
+
+        $urls = $this->makeService()->discoverUrls('https://example.com/', 'childcare');
+
+        $this->assertCount(1, $urls);
+        $this->assertContains('https://example.com/kosodate/', $urls);
+        $this->assertNotContains('https://example.com/tourism/', $urls);
+    }
+
+    public function test_discover_urls_caps_result_at_sitemap_max_urls(): void
+    {
+        config(['ai.crawler.sitemap_max_urls' => 2]);
+
+        $allUrls = array_map(fn (int $i) => "https://example.com/kosodate/s{$i}/", range(1, 10));
+
+        Http::fake([
+            'https://example.com/sitemap.xml' => Http::response(
+                $this->sitemapXml($allUrls),
+                200
+            ),
+        ]);
+
+        $urls = $this->makeService()->discoverUrls('https://example.com/', 'childcare');
+
+        $this->assertCount(2, $urls);
+    }
+
+    public function test_discover_urls_prefers_shallowest_urls_when_capping(): void
+    {
+        config(['ai.crawler.sitemap_max_urls' => 2]);
+
+        Http::fake([
+            'https://example.com/sitemap.xml' => Http::response(
+                $this->sitemapXml([
+                    'https://example.com/kosodate/hoiku/shien/', // 深さ3 → カット
+                    'https://example.com/kosodate/',             // 深さ1 → 残す
+                    'https://example.com/kosodate/hoiku/',       // 深さ2 → 残す
+                ]),
+                200
+            ),
+        ]);
+
+        $urls = $this->makeService()->discoverUrls('https://example.com/', 'childcare');
+
+        $this->assertCount(2, $urls);
+        $this->assertContains('https://example.com/kosodate/', $urls);
+        $this->assertContains('https://example.com/kosodate/hoiku/', $urls);
+        $this->assertNotContains('https://example.com/kosodate/hoiku/shien/', $urls);
+    }
 }
