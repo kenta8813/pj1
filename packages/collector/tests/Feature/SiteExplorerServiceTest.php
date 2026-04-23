@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Ai\ChildcareExtractorAgent;
 use App\Ai\GrantsExtractorAgent;
 use App\Ai\LinkFilterAgent;
+use App\Ai\RelevanceCheckerAgent;
 use App\Services\DataStoreService;
 use App\Services\ExtractorService;
 use App\Services\FetchService;
@@ -45,9 +46,20 @@ class SiteExplorerServiceTest extends TestCase
         return $agent;
     }
 
+    private function makeRelevanceChecker(bool $relevant = true): RelevanceCheckerAgent
+    {
+        $mock = $this->createMock(RelevanceCheckerAgent::class);
+        $mock->method('prompt')->willReturn(
+            new AgentResponse('id', json_encode(['relevant' => $relevant]), new Usage, new Meta)
+        );
+
+        return $mock;
+    }
+
     private function makeService(
         ChildcareExtractorAgent $extractor,
         LinkFilterAgent $linkFilter,
+        bool $relevant = true,
     ): SiteExplorerService {
         $sitemap = $this->createMock(SitemapService::class);
         $sitemap->method('discoverUrls')->willReturn([]);
@@ -58,6 +70,7 @@ class SiteExplorerServiceTest extends TestCase
             new ExtractorService($extractor, $this->createMock(GrantsExtractorAgent::class)),
             new DataStoreService,
             $sitemap,
+            $this->makeRelevanceChecker($relevant),
         );
     }
 
@@ -193,6 +206,7 @@ class SiteExplorerServiceTest extends TestCase
             new ExtractorService($extractorMock, $this->createMock(GrantsExtractorAgent::class)),
             new DataStoreService,
             $sitemapMock,
+            $this->makeRelevanceChecker(),
         );
 
         $saved = $service->explore('https://example.com/admin/', $this->template(), maxDepth: 0);
@@ -228,6 +242,22 @@ class SiteExplorerServiceTest extends TestCase
         $saved = $service->explore('https://example.com/', $this->template(), maxDepth: 0, dryRun: true);
 
         $this->assertSame(1, $saved);
+        Storage::disk('data')->assertMissing('example-com/index.json');
+    }
+
+    public function test_explore_does_not_save_when_relevance_check_returns_false(): void
+    {
+        Http::fake([
+            'https://example.com/' => Http::response('<html><body>よくある質問</body></html>', 200),
+        ]);
+
+        $extractor = $this->makeExtractorAgent(['title' => 'よくある質問', 'target' => '市民', 'contact' => '市役所', 'url' => 'https://example.com/']);
+        $linkFilter = $this->makeLinkFilterAgent([]);
+        $service = $this->makeService($extractor, $linkFilter, relevant: false);
+
+        $saved = $service->explore('https://example.com/', $this->template(), maxDepth: 0);
+
+        $this->assertSame(0, $saved);
         Storage::disk('data')->assertMissing('example-com/index.json');
     }
 

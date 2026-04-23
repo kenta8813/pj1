@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Ai\ChildcareExtractorAgent;
 use App\Ai\GrantsExtractorAgent;
 use App\Ai\LinkFilterAgent;
+use App\Ai\RelevanceCheckerAgent;
 use App\Jobs\ExploreJob;
 use App\Services\DataStoreService;
 use App\Services\ExtractorService;
@@ -44,12 +45,18 @@ class ExploreJobTest extends TestCase
         $sitemapMock = $this->createMock(SitemapService::class);
         $sitemapMock->method('discoverUrls')->willReturn([]);
 
+        $relevanceMock = $this->createMock(RelevanceCheckerAgent::class);
+        $relevanceMock->method('prompt')->willReturn(
+            new AgentResponse('id', json_encode(['relevant' => true]), new Usage, new Meta)
+        );
+
         $this->app->instance(SiteExplorerService::class, new SiteExplorerService(
             new FetchService,
             $linkFilterAgent,
             new ExtractorService($extractorAgent, $this->createMock(GrantsExtractorAgent::class)),
             new DataStoreService,
             $sitemapMock,
+            $relevanceMock,
         ));
     }
 

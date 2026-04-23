@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Ai\LinkFilterAgent;
+use App\Ai\RelevanceCheckerAgent;
 use Illuminate\Support\Facades\Log;
 
 class SiteExplorerService
@@ -13,6 +14,7 @@ class SiteExplorerService
         private readonly ExtractorService $extractor,
         private readonly DataStoreService $store,
         private readonly SitemapService $sitemap,
+        private readonly RelevanceCheckerAgent $relevanceChecker,
     ) {}
 
     /**
@@ -75,7 +77,7 @@ class SiteExplorerService
 
             $primaryKey = $templateName === 'grants' ? 'name' : 'title';
 
-            if (! empty($data) && ($data[$primaryKey] ?? '') !== '') {
+            if (! empty($data) && ($data[$primaryKey] ?? '') !== '' && $this->isRelevant($data, $templateName)) {
                 if (! $dryRun) {
                     $this->store->save($data);
                 }
@@ -96,6 +98,33 @@ class SiteExplorerService
         }
 
         return $saved;
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private function isRelevant(array $data, string $templateName): bool
+    {
+        $subject = $templateName === 'grants' ? '給付金・助成金・手当' : '子育て支援の制度・サービス';
+        $payload = json_encode(
+            array_diff_key($data, array_flip(['url', 'municipality', 'updated_at', '_fc_checked_at', '_fc_confidence', '_fc_issues'])),
+            JSON_UNESCAPED_UNICODE
+        );
+
+        try {
+            $response = (string) $this->relevanceChecker->prompt(
+                "【{$subject}】の具体的なページか判定してください。\nデータ: {$payload}",
+                model: config('ai.model')
+            );
+            $cleaned = trim((string) preg_replace('/^```(?:json)?\s*|\s*```$/m', '', $response));
+            $decoded = json_decode($cleaned, true);
+
+            return (bool) ($decoded['relevant'] ?? true);
+        } catch (\Throwable $e) {
+            Log::warning("SiteExplorerService: 関連性チェック失敗 — {$e->getMessage()}");
+
+            return true;
+        }
     }
 
     /**
