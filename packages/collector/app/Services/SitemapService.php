@@ -89,8 +89,13 @@ class SitemapService
         Log::info('SitemapService: '.count($relevant).'/'.count($allSitemaps).'件のサブサイトマップを選択');
 
         $pages = [];
+        $rateLimitMs = (int) config('ai.crawler.rate_limit_ms', 1000);
 
         foreach ($relevant as $url) {
+            if ($rateLimitMs > 0) {
+                usleep($rateLimitMs * 1000);
+            }
+
             try {
                 $subXml = $this->fetcher->fetch($url);
                 $pages = array_merge($pages, $this->extractPageUrls($subXml));
