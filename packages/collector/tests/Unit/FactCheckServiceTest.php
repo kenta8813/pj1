@@ -4,6 +4,7 @@ namespace Tests\Unit;
 
 use App\Ai\ChildcareExtractorAgent;
 use App\Ai\FactCheckerAgent;
+use App\Ai\GrantsExtractorAgent;
 use App\Services\DataStoreService;
 use App\Services\ExtractorService;
 use App\Services\FactCheckService;
@@ -40,7 +41,7 @@ class FactCheckServiceTest extends TestCase
             new FetchService,
             $agent,
             new DataStoreService,
-            new ExtractorService($extractor),
+            new ExtractorService($extractor, $this->createMock(GrantsExtractorAgent::class)),
         );
     }
 
@@ -70,7 +71,7 @@ class FactCheckServiceTest extends TestCase
         $agent->expects($this->never())->method('prompt');
         $extractor = $this->createMock(ChildcareExtractorAgent::class);
 
-        $service = new FactCheckService(new FetchService, $agent, new DataStoreService, new ExtractorService($extractor));
+        $service = new FactCheckService(new FetchService, $agent, new DataStoreService, new ExtractorService($extractor, $this->createMock(GrantsExtractorAgent::class)));
         $data = ['url' => 'https://example.com/missing', 'title' => 'テスト', '_fc_confidence' => '', '_fc_issues' => [], '_fc_checked_at' => ''];
         $result = $service->check($data, dryRun: true);
 
@@ -128,7 +129,7 @@ class FactCheckServiceTest extends TestCase
         $agentMock->method('prompt')->willReturn($this->makeAgentResponse(json_encode(['confidence' => 'high', 'issues' => []])));
 
         $extractor = $this->createMock(ChildcareExtractorAgent::class);
-        $service = new FactCheckService(new FetchService, $agentMock, $store, new ExtractorService($extractor));
+        $service = new FactCheckService(new FetchService, $agentMock, $store, new ExtractorService($extractor, $this->createMock(GrantsExtractorAgent::class)));
 
         $counts = $service->checkAll(dryRun: true);
 
@@ -151,7 +152,7 @@ class FactCheckServiceTest extends TestCase
         $agentMock->method('prompt')->willReturn($this->makeAgentResponse(json_encode(['confidence' => 'high', 'issues' => []])));
 
         $extractor = $this->createMock(ChildcareExtractorAgent::class);
-        $service = new FactCheckService(new FetchService, $agentMock, $store, new ExtractorService($extractor));
+        $service = new FactCheckService(new FetchService, $agentMock, $store, new ExtractorService($extractor, $this->createMock(GrantsExtractorAgent::class)));
 
         $counts = $service->checkAll(dryRun: true, confidence: 'low');
 

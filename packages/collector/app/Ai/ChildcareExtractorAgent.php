@@ -11,7 +11,7 @@ use Laravel\Ai\Promptable;
 
 #[Provider(Lab::OpenRouter)]
 #[Temperature(0.0)]
-#[MaxTokens(2048)]
+#[MaxTokens(4096)]
 class ChildcareExtractorAgent implements Agent
 {
     use Promptable;

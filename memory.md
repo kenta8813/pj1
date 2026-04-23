@@ -5,6 +5,7 @@
 ## 現在のフェーズ
 
 **Phase 1: データ収集モジュール** — 実装完了 ✓（テスト全通過）
+**高岡市データ収集** — 実行完了（22件保存）✓
 
 ## 直近タスク
 
@@ -40,6 +41,38 @@
 - [x] LLMモデルを `LLM_MODEL` 環境変数で設定可能に（デフォルト: `google/gemini-2.0-flash-exp:free`）
 - [x] `.env.example` 作成
 
+### 高岡市データ収集（完了）
+- [x] `www.city.takaoka.toyama.jp` に対して `collect:run` 実行
+- [x] `ExtractorService::repairPartialJson()` 追加（途中切れJSON対応）
+- [x] `ChildcareExtractorAgent` MaxTokens 2048→4096 に増加
+- [x] `config/collection_targets.php` に高岡市エントリ追加
+- [x] 22件の子育て支援情報を `storage/app/data/www-city-takaoka-toyama-jp/` に保存
+
+### サイトマップ自律探索（完了）
+- [x] `app/Services/SitemapService.php` 新規実装（サイトマップインデックス対応・キーワードフィルタ）
+- [x] `SiteExplorerService` にサイトマップ探索フローを組み込み（fallback付き）
+- [x] `SitemapServiceTest`（Unit）8件追加・全74件通過
+- [x] `SitemapService::isIndexUrl()` をindex.html/末尾スラッシュのみに制限（葉ページ除外）
+- [x] 深度の適応的設定：`effectiveDepth = $maxDepth ?? ($usingSitemap ? 2 : 5)`
+- [x] `--depth` オプション省略時はサイトマップ有無で自動選択（CollectRun/ExploreJob改修）
+
+### ノイズフィルター実装（完了）
+- [x] フィルターA（ルールベース）: `ExtractorService` にフィールド充足度チェック追加（意味フィールド2件以上必須）
+  - `MEANINGFUL_FIELDS` / `MIN_FILLED_FIELDS = 2` 定数追加
+- [x] フィルターB（LLM）: `app/Ai/RelevanceCheckerAgent.php` 新規作成（MaxTokens=32）
+- [x] `SiteExplorerService::isRelevant()` 追加（AパスのみBを呼び出し、エラー時はtrueフォールバック）
+- [x] コンストラクタ6引数化（FetchService/LinkFilterAgent/ExtractorService/DataStoreService/SitemapService/RelevanceCheckerAgent）
+- [x] テスト全通過（ExploreJobTest・SiteExplorerServiceTest 更新）
+
+### 給付・助成金特化収集（完了）
+- [x] `resources/templates/grants.json` 新規作成（name/type/amount/deadline 等）
+- [x] `app/Ai/GrantsExtractorAgent.php` 実装（給付特化プロンプト）
+- [x] `ExtractorService` をテンプレート名でエージェント切り替え対応に改修
+- [x] `SiteExplorerService` に `templateName` パラメータ追加
+- [x] `LinkFilterAgent` の instructions に給付系カテゴリを追記
+- [x] テスト全通過（66件）
+- [x] 高岡市給付ページ 10件追加保存（計32件）
+
 ## パッケージステータス
 
 | パッケージ | ステータス |
@@ -63,9 +96,25 @@
 | 2026-04-19 | ファクトチェック結果は `_fc_*` フィールドとして元JSONに追記 | 別ファイル管理より一元管理が扱いやすい |
 | 2026-04-19 | LLMモデルを `LLM_MODEL` env変数で切り替え可能に | PHP属性はコンパイル時定数のためenv不可→prompt()の`model:`引数で解決 |
 | 2026-04-19 | デフォルトモデルを `google/gemini-2.0-flash-exp:free` に設定 | 開発・テスト時のAPIコスト無料化 |
+| 2026-04-19 | 高岡市収集エントリポイントを `/gyosei/kosodate_kyoiku/index.html` に設定 | トップページはJS依存でリンク6件のみ、子育てセクション直指定で効率化 |
+| 2026-04-19 | ChildcareExtractorAgent MaxTokens 2048→4096 | free model がJSON途中で切れる問題を回避 |
+| 2026-04-23 | サイトマップ抽出をindex.htmlおよびディレクトリrootのみに制限 | 葉ページまで含めると1389件になりすぎるためHTMLリンク探索に委任 |
+| 2026-04-23 | 深度の適応的設定（サイトマップあり=2、なし=5） | サイトマップ起点ならdepth=2で十分、フォールバック時は深く探索 |
+| 2026-04-23 | RelevanceCheckerAgent MaxTokens=32 | {"relevant": true/false}のみ返すため最小トークンで十分、コスト抑制 |
+| 2026-04-23 | `CRAWLER_USER_AGENT` 環境変数でUA上書き可能に（既存設定） | 高岡市sitemap.xmlはChrome UAで200、ChildcareBotでは403 |
 
 ## 既知の課題・ブロッカー
 
 - `ExampleTest`（`tests/Feature/ExampleTest.php`）は `APP_KEY` 未設定で失敗（Phase 1 実装とは無関係、既存の未解決問題）
 - next-devtools-mcp は Next.js 16+ と実行中のdev serverが必要（一部ツール）
 - Phase 2 開始前にポータルUI設計（director エージェント）が必要
+- **OpenRouter 401エラー**: `OPENROUTER_API_KEY` が `.env` に未設定または失効している可能性。確認・再設定が必要
+- **サイトマップUA**: 高岡市の `sitemap.xml` は `ChildcareBot/1.0` UAで403。Chrome UAで解決（環境変数 `CRAWLER_USER_AGENT` で上書き可能）。本番実行時は要設定
+
+## 実行方法メモ
+
+```bash
+# Chrome UAでサイトマップ取得（高岡市対策）
+CRAWLER_USER_AGENT="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36" \
+php artisan collect:run https://www.city.takaoka.toyama.jp/kosodate_kyoiku/
+```

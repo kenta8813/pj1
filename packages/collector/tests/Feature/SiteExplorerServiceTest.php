@@ -3,11 +3,14 @@
 namespace Tests\Feature;
 
 use App\Ai\ChildcareExtractorAgent;
+use App\Ai\GrantsExtractorAgent;
 use App\Ai\LinkFilterAgent;
+use App\Ai\RelevanceCheckerAgent;
 use App\Services\DataStoreService;
 use App\Services\ExtractorService;
 use App\Services\FetchService;
 use App\Services\SiteExplorerService;
+use App\Services\SitemapService;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Ai\Responses\AgentResponse;
@@ -43,15 +46,31 @@ class SiteExplorerServiceTest extends TestCase
         return $agent;
     }
 
+    private function makeRelevanceChecker(bool $relevant = true): RelevanceCheckerAgent
+    {
+        $mock = $this->createMock(RelevanceCheckerAgent::class);
+        $mock->method('prompt')->willReturn(
+            new AgentResponse('id', json_encode(['relevant' => $relevant]), new Usage, new Meta)
+        );
+
+        return $mock;
+    }
+
     private function makeService(
         ChildcareExtractorAgent $extractor,
         LinkFilterAgent $linkFilter,
+        bool $relevant = true,
     ): SiteExplorerService {
+        $sitemap = $this->createMock(SitemapService::class);
+        $sitemap->method('discoverUrls')->willReturn([]);
+
         return new SiteExplorerService(
             new FetchService,
             $linkFilter,
-            new ExtractorService($extractor),
+            new ExtractorService($extractor, $this->createMock(GrantsExtractorAgent::class)),
             new DataStoreService,
+            $sitemap,
+            $this->makeRelevanceChecker($relevant),
         );
     }
 
@@ -70,7 +89,7 @@ class SiteExplorerServiceTest extends TestCase
             'https://example.com/' => Http::response('<html><body><main>保育園情報</main></body></html>', 200),
         ]);
 
-        $extractor = $this->makeExtractorAgent(['title' => '保育園案内', 'url' => 'https://example.com/']);
+        $extractor = $this->makeExtractorAgent(['title' => '保育園案内', 'target' => '0〜5歳', 'contact' => '子育て課', 'url' => 'https://example.com/']);
         $linkFilter = $this->makeLinkFilterAgent([]);
 
         $service = $this->makeService($extractor, $linkFilter);
@@ -105,7 +124,7 @@ class SiteExplorerServiceTest extends TestCase
         $extractorMock = $this->createMock(ChildcareExtractorAgent::class);
         $extractorMock->method('prompt')->willReturnCallback(function ($prompt) {
             if (str_contains((string) $prompt, '/hoiku')) {
-                return new AgentResponse('id', json_encode(['title' => '保育園', 'url' => 'https://example.com/hoiku'], JSON_UNESCAPED_UNICODE), new Usage, new Meta);
+                return new AgentResponse('id', json_encode(['title' => '保育園', 'target' => '0〜5歳', 'contact' => '子育て課', 'url' => 'https://example.com/hoiku'], JSON_UNESCAPED_UNICODE), new Usage, new Meta);
             }
 
             return new AgentResponse('id', json_encode(['title' => '', 'url' => 'https://example.com/'], JSON_UNESCAPED_UNICODE), new Usage, new Meta);
@@ -127,7 +146,7 @@ class SiteExplorerServiceTest extends TestCase
 
         $extractorMock = $this->createMock(ChildcareExtractorAgent::class);
         $extractorMock->method('prompt')->willReturn(
-            new AgentResponse('id', json_encode(['title' => 'ページ', 'url' => 'https://example.com/'], JSON_UNESCAPED_UNICODE), new Usage, new Meta)
+            new AgentResponse('id', json_encode(['title' => 'ページ', 'target' => '市民', 'contact' => '市役所', 'url' => 'https://example.com/'], JSON_UNESCAPED_UNICODE), new Usage, new Meta)
         );
 
         $linkFilterMock = $this->createMock(LinkFilterAgent::class);
@@ -156,7 +175,7 @@ class SiteExplorerServiceTest extends TestCase
 
         $extractorMock = $this->createMock(ChildcareExtractorAgent::class);
         $extractorMock->method('prompt')->willReturn(
-            new AgentResponse('id', json_encode(['title' => 'タイトル', 'url' => ''], JSON_UNESCAPED_UNICODE), new Usage, new Meta)
+            new AgentResponse('id', json_encode(['title' => 'タイトル', 'target' => '市民', 'contact' => '市役所', 'url' => ''], JSON_UNESCAPED_UNICODE), new Usage, new Meta)
         );
 
         $linkFilter = $this->makeLinkFilterAgent(['https://example.com/p2', 'https://example.com/p3']);
@@ -178,12 +197,16 @@ class SiteExplorerServiceTest extends TestCase
         $extractorMock = $this->createMock(ChildcareExtractorAgent::class);
         $extractorMock->expects($this->never())->method('prompt');
 
+        $sitemapMock = $this->createMock(SitemapService::class);
+        $sitemapMock->method('discoverUrls')->willReturn([]);
         $linkFilter = $this->makeLinkFilterAgent([]);
         $service = new SiteExplorerService(
             new FetchService,
             $linkFilter,
-            new ExtractorService($extractorMock),
+            new ExtractorService($extractorMock, $this->createMock(GrantsExtractorAgent::class)),
             new DataStoreService,
+            $sitemapMock,
+            $this->makeRelevanceChecker(),
         );
 
         $saved = $service->explore('https://example.com/admin/', $this->template(), maxDepth: 0);
@@ -212,13 +235,29 @@ class SiteExplorerServiceTest extends TestCase
             'https://example.com/' => Http::response('<html><body>内容</body></html>', 200),
         ]);
 
-        $extractor = $this->makeExtractorAgent(['title' => '子育て', 'url' => 'https://example.com/']);
+        $extractor = $this->makeExtractorAgent(['title' => '子育て', 'target' => '保護者', 'contact' => '子育て課', 'url' => 'https://example.com/']);
         $linkFilter = $this->makeLinkFilterAgent([]);
         $service = $this->makeService($extractor, $linkFilter);
 
         $saved = $service->explore('https://example.com/', $this->template(), maxDepth: 0, dryRun: true);
 
         $this->assertSame(1, $saved);
+        Storage::disk('data')->assertMissing('example-com/index.json');
+    }
+
+    public function test_explore_does_not_save_when_relevance_check_returns_false(): void
+    {
+        Http::fake([
+            'https://example.com/' => Http::response('<html><body>よくある質問</body></html>', 200),
+        ]);
+
+        $extractor = $this->makeExtractorAgent(['title' => 'よくある質問', 'target' => '市民', 'contact' => '市役所', 'url' => 'https://example.com/']);
+        $linkFilter = $this->makeLinkFilterAgent([]);
+        $service = $this->makeService($extractor, $linkFilter, relevant: false);
+
+        $saved = $service->explore('https://example.com/', $this->template(), maxDepth: 0);
+
+        $this->assertSame(0, $saved);
         Storage::disk('data')->assertMissing('example-com/index.json');
     }
 
