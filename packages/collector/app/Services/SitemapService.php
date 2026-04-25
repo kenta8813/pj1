@@ -27,6 +27,7 @@ class SitemapService
     /**
      * エントリURLのドメインからサイトマップを探索し、
      * テンプレートに関連するページURLを返す。
+     * 浅いセクション起点を優先し、最大 sitemap_max_urls 件に絞り込む。
      * サイトマップが存在しない・取得失敗の場合は空配列を返す。
      *
      * @return array<int, string>
@@ -45,12 +46,16 @@ class SitemapService
 
         if ($this->isSitemapIndex($xml)) {
             $urls = $this->processIndex($xml, $templateName);
-            Log::info('SitemapService: '.count($urls)."件のURLをサイトマップから発見 [{$sitemapUrl}]");
-
-            return $urls;
+        } else {
+            // ダイレクトサイトマップ: サブサイトマップ名フィルタがないためURLパスにもキーワードフィルタを適用
+            $urls = $this->extractPageUrls($xml, applyKeywordFilter: true, templateName: $templateName);
         }
 
-        $urls = $this->extractPageUrls($xml);
+        // 浅いセクション起点を優先し、設定上限で切り詰め
+        usort($urls, fn (string $a, string $b) => $this->urlPathDepth($a) <=> $this->urlPathDepth($b));
+        $maxUrls = (int) config('ai.crawler.sitemap_max_urls', 30);
+        $urls = array_slice($urls, 0, $maxUrls);
+
         Log::info('SitemapService: '.count($urls)."件のURLをサイトマップから発見 [{$sitemapUrl}]");
 
         return $urls;
@@ -84,8 +89,13 @@ class SitemapService
         Log::info('SitemapService: '.count($relevant).'/'.count($allSitemaps).'件のサブサイトマップを選択');
 
         $pages = [];
+        $rateLimitMs = (int) config('ai.crawler.rate_limit_ms', 1000);
 
         foreach ($relevant as $url) {
+            if ($rateLimitMs > 0) {
+                usleep($rateLimitMs * 1000);
+            }
+
             try {
                 $subXml = $this->fetcher->fetch($url);
                 $pages = array_merge($pages, $this->extractPageUrls($subXml));
@@ -117,16 +127,36 @@ class SitemapService
     /**
      * サイトマップXMLからセクション入口URL（index.html / ディレクトリroot）を抽出する。
      * 葉ページ（個別記事・番号URL等）は除外し、HTMLリンク探索の起点となるURLだけを返す。
+     * $applyKeywordFilter が true の場合、URLパス自体にもキーワードフィルタを適用する。
      *
      * @return array<int, string>
      */
-    private function extractPageUrls(string $xml): array
-    {
+    private function extractPageUrls(
+        string $xml,
+        bool $applyKeywordFilter = false,
+        string $templateName = '',
+    ): array {
         preg_match_all('/<loc>(.*?)<\/loc>/s', $xml, $m);
+        $maxDepth = (int) config('ai.crawler.sitemap_max_depth', 3);
 
         return array_values(array_filter(
             array_map('trim', $m[1] ?? []),
-            fn (string $url) => ! str_contains($url, 'sitemap') && $this->isIndexUrl($url)
+            function (string $url) use ($applyKeywordFilter, $templateName, $maxDepth): bool {
+                if (str_contains($url, 'sitemap')) {
+                    return false;
+                }
+                if (! $this->isIndexUrl($url)) {
+                    return false;
+                }
+                if ($this->urlPathDepth($url) > $maxDepth) {
+                    return false;
+                }
+                if ($applyKeywordFilter && $templateName !== '') {
+                    return $this->matchesKeyword($url, $templateName);
+                }
+
+                return true;
+            }
         ));
     }
 
@@ -142,5 +172,28 @@ class SitemapService
         }
 
         return preg_match('/^index\.html?$/i', basename($path)) === 1;
+    }
+
+    /**
+     * URLのパスのセグメント数（深さ）を返す。
+     * e.g. /kosodate/hoiku/shien/ → 3
+     */
+    private function urlPathDepth(string $url): int
+    {
+        $path = parse_url($url, PHP_URL_PATH) ?? '/';
+        $segments = array_filter(explode('/', $path), fn (string $s) => $s !== '');
+
+        return count($segments);
+    }
+
+    /**
+     * URLパスがテンプレートのキーワードにマッチするか判定する。
+     */
+    private function matchesKeyword(string $url, string $templateName): bool
+    {
+        $keywords = self::KEYWORDS[$templateName] ?? self::KEYWORDS['childcare'];
+        $pattern = implode('|', $keywords);
+
+        return (bool) preg_match("/({$pattern})/i", $url);
     }
 }
